@@ -1,0 +1,12 @@
+server:
+  port: 8087
+
+spring:
+  application:
+    name: spring-statemachine-showcase
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
