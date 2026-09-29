@@ -6,6 +6,8 @@ import com.example.statemachine.service.OrderWorkflowService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.UUID;
@@ -44,15 +46,20 @@ public class OrderWorkflowController {
      * @return response entity containing the generated order ID and initial state
      */
     @PostMapping("/create")
-    public ResponseEntity<Map<String, Object>> createOrder() {
+    public ResponseEntity<Map<String, Object>> createOrder(
+            @RequestBody(required = false) CreateOrderRequest request) {
         String orderId = "ORD-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-        var sm = workflowService.createOrder(orderId);
+        String customerName = request == null ? null : request.customerName();
+        String customerEmail = request == null ? null : request.customerEmail();
+        var sm = workflowService.createOrder(orderId, customerName, customerEmail);
 
-        return ResponseEntity.ok(Map.of(
-                "orderId", orderId,
-                "currentState", sm.getState().getId(),
-                "message", "Order workflow initialized in SUBMITTED state."
-        ));
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("orderId", orderId);
+        response.put("currentState", sm.getState().getId());
+        response.put("customerName", customerName);
+        response.put("customerEmail", customerEmail);
+        response.put("message", "Order workflow initialized in SUBMITTED state.");
+        return ResponseEntity.status(201).body(response);
     }
 
     /**
@@ -96,10 +103,12 @@ public class OrderWorkflowController {
             return ResponseEntity.notFound().build();
         }
         OrderStates state = workflowService.getOrderState(orderId);
+        var details = workflowService.getOrderDetails(orderId);
         return ResponseEntity.ok(Map.of(
                 "orderId", orderId,
                 "currentState", state,
-                "availableEvents", workflowService.getAvailableEvents(orderId)
+                "availableEvents", workflowService.getAvailableEvents(orderId),
+                "customer", details
         ));
     }
 
@@ -127,6 +136,25 @@ public class OrderWorkflowController {
         return ResponseEntity.ok(orders);
     }
 
+    @GetMapping("/details")
+    public ResponseEntity<List<OrderView>> getOrdersWithDetails() {
+        List<OrderView> orders = workflowService.getOrdersWithDetails().stream()
+                .map(details -> new OrderView(details.orderId(), workflowService.getOrderState(details.orderId()),
+                        details.customerName(), details.customerEmail(), details.createdAt()))
+                .toList();
+        return ResponseEntity.ok(orders);
+    }
+
+    @GetMapping("/{orderId}/details")
+    public ResponseEntity<?> getOrderDetails(@PathVariable String orderId) {
+        if (!workflowService.orderExists(orderId)) {
+            return ResponseEntity.notFound().build();
+        }
+        var details = workflowService.getOrderDetails(orderId);
+        return ResponseEntity.ok(new OrderView(details.orderId(), workflowService.getOrderState(orderId),
+                details.customerName(), details.customerEmail(), details.createdAt()));
+    }
+
     @GetMapping("/summary")
     public ResponseEntity<Map<String, Object>> getWorkflowSummary() {
         Map<OrderStates, Long> counts = workflowService.getOrderCountsByState();
@@ -148,5 +176,12 @@ public class OrderWorkflowController {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok(workflowService.getHistory(orderId));
+    }
+
+    public record CreateOrderRequest(String customerName, String customerEmail) {
+    }
+
+    public record OrderView(String orderId, OrderStates currentState, String customerName,
+                            String customerEmail, java.time.Instant createdAt) {
     }
 }

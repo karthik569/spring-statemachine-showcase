@@ -27,18 +27,28 @@ public class OrderWorkflowService {
     private final StateMachineFactory<OrderStates, OrderEvents> stateMachineFactory;
     private final Map<String, StateMachine<OrderStates, OrderEvents>> machines = new ConcurrentHashMap<>();
     private final Map<String, List<TransitionRecord>> history = new ConcurrentHashMap<>();
+    private final Map<String, OrderDetails> orderDetails = new ConcurrentHashMap<>();
 
     public OrderWorkflowService(StateMachineFactory<OrderStates, OrderEvents> stateMachineFactory) {
         this.stateMachineFactory = stateMachineFactory;
     }
 
     public StateMachine<OrderStates, OrderEvents> createOrder(String orderId) {
+        return createOrder(orderId, null, null);
+    }
+
+    public StateMachine<OrderStates, OrderEvents> createOrder(String orderId, String customerName, String customerEmail) {
         StateMachine<OrderStates, OrderEvents> sm = stateMachineFactory.getStateMachine(orderId);
         sm.startReactively().subscribe();
         machines.put(orderId, sm);
         history.put(orderId, new CopyOnWriteArrayList<>());
+        orderDetails.put(orderId, new OrderDetails(orderId, clean(customerName), clean(customerEmail), Instant.now()));
         log.info("[WORKFLOW] Created state machine for orderId={} (Initial: {})", orderId, sm.getState().getId());
         return sm;
+    }
+
+    private String clean(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     public boolean sendEvent(String orderId, OrderEvents event) {
@@ -91,6 +101,16 @@ public class OrderWorkflowService {
         return orders;
     }
 
+    public OrderDetails getOrderDetails(String orderId) {
+        return orderDetails.get(orderId);
+    }
+
+    public List<OrderDetails> getOrdersWithDetails() {
+        return orderDetails.values().stream()
+                .sorted(java.util.Comparator.comparing(OrderDetails::orderId))
+                .toList();
+    }
+
     public Map<OrderStates, Long> getOrderCountsByState() {
         Map<OrderStates, Long> counts = new EnumMap<>(OrderStates.class);
         for (OrderStates state : OrderStates.values()) {
@@ -107,5 +127,8 @@ public class OrderWorkflowService {
 
     public record TransitionRecord(Instant timestamp, OrderEvents event, OrderStates previousState,
                                    OrderStates currentState, boolean accepted) {
+    }
+
+    public record OrderDetails(String orderId, String customerName, String customerEmail, Instant createdAt) {
     }
 }

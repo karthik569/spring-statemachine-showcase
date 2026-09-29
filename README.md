@@ -58,5 +58,17 @@ curl -i -X POST "http://localhost:8087/api/workflow/orders/<ORDER_ID>/event?even
 - `GET /api/workflow/orders/{orderId}/state` returns the current state and the events currently allowed from it.
 - `GET /api/workflow/orders/{orderId}/available-events` returns the events currently allowed for an order.
 - `GET /api/workflow/orders/{orderId}/history` returns its event history.
+- `GET /api/workflow/orders/details` lists orders with customer details and creation time.
+- `GET /api/workflow/orders/{orderId}/details` returns one order's details.
+
+Create an order with optional customer data by posting JSON to `/api/workflow/orders/create`:
+
+```bash
+curl -i -X POST http://localhost:8087/api/workflow/orders/create \
+  -H "Content-Type: application/json" \
+  -d '{"customerName":"Asha Rao","customerEmail":"asha@example.com"}'
+```
+
+The existing empty-body create request remains supported.
 
 Orders can be cancelled while `SUBMITTED`, `PAYMENT_PENDING`, `PAID`, or `PREPARING`. Once dispatched, an order can no longer be cancelled through this workflow.
