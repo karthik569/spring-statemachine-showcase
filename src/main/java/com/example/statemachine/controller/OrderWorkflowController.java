@@ -3,6 +3,10 @@ package com.example.statemachine.controller;
 import com.example.statemachine.model.OrderEvents;
 import com.example.statemachine.model.OrderStates;
 import com.example.statemachine.service.OrderWorkflowService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -47,7 +51,7 @@ public class OrderWorkflowController {
      */
     @PostMapping("/create")
     public ResponseEntity<Map<String, Object>> createOrder(
-            @RequestBody(required = false) CreateOrderRequest request) {
+            @Valid @RequestBody(required = false) CreateOrderRequest request) {
         String orderId = "ORD-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
         String customerName = request == null ? null : request.customerName();
         String customerEmail = request == null ? null : request.customerEmail();
@@ -178,7 +182,14 @@ public class OrderWorkflowController {
         return ResponseEntity.ok(workflowService.getHistory(orderId));
     }
 
-    public record CreateOrderRequest(String customerName, String customerEmail) {
+    public record CreateOrderRequest(
+            @NotBlank(message = "must not be blank")
+            @Size(max = 120, message = "must be at most 120 characters")
+            String customerName,
+            @NotBlank(message = "must not be blank")
+            @Email(message = "must be a valid email address")
+            @Size(max = 254, message = "must be at most 254 characters")
+            String customerEmail) {
     }
 
     public record OrderView(String orderId, OrderStates currentState, String customerName,

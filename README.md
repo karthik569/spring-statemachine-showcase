@@ -71,4 +71,6 @@ curl -i -X POST http://localhost:8087/api/workflow/orders/create \
 
 The existing empty-body create request remains supported.
 
+When supplied, `customerName` must contain 1–120 characters and `customerEmail` must be a valid email address of at most 254 characters. Invalid fields return HTTP 400 with an `errors` object keyed by field name.
+
 Orders can be cancelled while `SUBMITTED`, `PAYMENT_PENDING`, `PAID`, or `PREPARING`. Once dispatched, an order can no longer be cancelled through this workflow.
