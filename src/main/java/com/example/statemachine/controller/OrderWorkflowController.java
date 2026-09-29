@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.UUID;
 
 /**
@@ -115,8 +116,30 @@ public class OrderWorkflowController {
     }
 
     @GetMapping
-    public ResponseEntity<Map<String, OrderStates>> getOrders() {
-        return ResponseEntity.ok(workflowService.getOrders());
+    public ResponseEntity<Map<String, OrderStates>> getOrders(
+            @RequestParam(required = false) OrderStates state) {
+        Map<String, OrderStates> orders = workflowService.getOrders();
+        if (state != null) {
+            orders = orders.entrySet().stream()
+                    .filter(entry -> entry.getValue() == state)
+                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        }
+        return ResponseEntity.ok(orders);
+    }
+
+    @GetMapping("/summary")
+    public ResponseEntity<Map<String, Object>> getWorkflowSummary() {
+        Map<OrderStates, Long> counts = workflowService.getOrderCountsByState();
+        long delivered = counts.get(OrderStates.DELIVERED);
+        long cancelled = counts.get(OrderStates.CANCELLED);
+        long total = counts.values().stream().mapToLong(Long::longValue).sum();
+        return ResponseEntity.ok(Map.of(
+                "totalOrders", total,
+                "activeOrders", total - delivered - cancelled,
+                "deliveredOrders", delivered,
+                "cancelledOrders", cancelled,
+                "ordersByState", counts
+        ));
     }
 
     @GetMapping("/{orderId}/history")

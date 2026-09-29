@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.EnumMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -88,6 +89,15 @@ public class OrderWorkflowService {
         Map<String, OrderStates> orders = new java.util.TreeMap<>();
         machines.forEach((id, machine) -> orders.put(id, machine.getState().getId()));
         return orders;
+    }
+
+    public Map<OrderStates, Long> getOrderCountsByState() {
+        Map<OrderStates, Long> counts = new EnumMap<>(OrderStates.class);
+        for (OrderStates state : OrderStates.values()) {
+            counts.put(state, 0L);
+        }
+        getOrders().values().forEach(state -> counts.compute(state, (key, count) -> count + 1));
+        return counts;
     }
 
     public List<TransitionRecord> getHistory(String orderId) {
