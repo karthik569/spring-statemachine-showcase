@@ -66,6 +66,10 @@ public class OrderWorkflowController {
             @PathVariable String orderId,
             @RequestParam OrderEvents event) {
 
+        if (!workflowService.orderExists(orderId)) {
+            return ResponseEntity.notFound().build();
+        }
+
         OrderStates stateBefore = workflowService.getOrderState(orderId);
         boolean accepted = workflowService.sendEvent(orderId, event);
         OrderStates stateAfter = workflowService.getOrderState(orderId);
@@ -87,10 +91,39 @@ public class OrderWorkflowController {
      */
     @GetMapping("/{orderId}/state")
     public ResponseEntity<Map<String, Object>> getOrderState(@PathVariable String orderId) {
+        if (!workflowService.orderExists(orderId)) {
+            return ResponseEntity.notFound().build();
+        }
         OrderStates state = workflowService.getOrderState(orderId);
         return ResponseEntity.ok(Map.of(
                 "orderId", orderId,
-                "currentState", state
+                "currentState", state,
+                "availableEvents", workflowService.getAvailableEvents(orderId)
         ));
+    }
+
+    @GetMapping("/{orderId}/available-events")
+    public ResponseEntity<?> getAvailableEvents(@PathVariable String orderId) {
+        if (!workflowService.orderExists(orderId)) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(Map.of(
+                "orderId", orderId,
+                "currentState", workflowService.getOrderState(orderId),
+                "availableEvents", workflowService.getAvailableEvents(orderId)
+        ));
+    }
+
+    @GetMapping
+    public ResponseEntity<Map<String, OrderStates>> getOrders() {
+        return ResponseEntity.ok(workflowService.getOrders());
+    }
+
+    @GetMapping("/{orderId}/history")
+    public ResponseEntity<?> getOrderHistory(@PathVariable String orderId) {
+        if (!workflowService.orderExists(orderId)) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(workflowService.getHistory(orderId));
     }
 }
