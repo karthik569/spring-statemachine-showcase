@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.LinkedHashMap;
@@ -83,16 +84,21 @@ public class OrderWorkflowController {
         }
 
         OrderStates stateBefore = workflowService.getOrderState(orderId);
-        boolean accepted = workflowService.sendEvent(orderId, event);
+        var outcome = workflowService.sendEvent(orderId, event);
         OrderStates stateAfter = workflowService.getOrderState(orderId);
 
-        return ResponseEntity.ok(Map.of(
-                "orderId", orderId,
-                "eventSent", event,
-                "previousState", stateBefore,
-                "currentState", stateAfter,
-                "transitionAccepted", accepted
-        ));
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("orderId", orderId);
+        response.put("eventSent", event);
+        response.put("previousState", stateBefore);
+        response.put("currentState", stateAfter);
+        response.put("transitionAccepted", outcome.accepted());
+        if (!outcome.accepted()) {
+            response.put("reason", outcome.reason());
+            response.put("availableEvents", workflowService.getAvailableEvents(orderId));
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+        }
+        return ResponseEntity.ok(response);
     }
 
     /**

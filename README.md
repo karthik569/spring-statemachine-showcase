@@ -60,6 +60,7 @@ curl -i -X POST "http://localhost:8087/api/workflow/orders/<ORDER_ID>/event?even
 - `GET /api/workflow/orders/{orderId}/history` returns its event history.
 - `GET /api/workflow/orders/details` lists orders with customer details and creation time.
 - `GET /api/workflow/orders/{orderId}/details` returns one order's details.
+- `POST /api/workflow/orders/{orderId}/event?event=...` returns HTTP 409 with the current state and allowed events when the requested transition is not valid.
 
 Create an order with optional customer data by posting JSON to `/api/workflow/orders/create`:
 

@@ -51,10 +51,10 @@ public class OrderWorkflowService {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
-    public boolean sendEvent(String orderId, OrderEvents event) {
+    public EventOutcome sendEvent(String orderId, OrderEvents event) {
         StateMachine<OrderStates, OrderEvents> sm = machines.get(orderId);
         if (sm == null) {
-            return false;
+            return new EventOutcome(false, "Order was not found.");
         }
 
         synchronized (sm) {
@@ -67,7 +67,8 @@ public class OrderWorkflowService {
                     && result.getResultType() == StateMachineEventResult.ResultType.ACCEPTED;
             OrderStates currentState = sm.getState().getId();
             history.get(orderId).add(new TransitionRecord(Instant.now(), event, previousState, currentState, accepted));
-            return accepted;
+            String reason = accepted ? null : "Event " + event + " is not valid from state " + previousState + ".";
+            return new EventOutcome(accepted, reason);
         }
     }
 
@@ -127,6 +128,9 @@ public class OrderWorkflowService {
 
     public record TransitionRecord(Instant timestamp, OrderEvents event, OrderStates previousState,
                                    OrderStates currentState, boolean accepted) {
+    }
+
+    public record EventOutcome(boolean accepted, String reason) {
     }
 
     public record OrderDetails(String orderId, String customerName, String customerEmail, Instant createdAt) {
