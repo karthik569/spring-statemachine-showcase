@@ -49,4 +49,28 @@ class OrderPaymentRetryStateMachineTest {
         assertTrue(workflowService.sendEvent(orderId, OrderEvents.CANCEL).accepted());
         assertEquals(OrderStates.CANCELLED, workflowService.getOrderState(orderId));
     }
+
+    @Test
+    void deliveredOrderCanCompleteAReturnWorkflow() {
+        String orderId = "ORD-RETURN-" + UUID.randomUUID();
+        workflowService.createOrder(orderId);
+        assertTrue(workflowService.sendEvent(orderId, OrderEvents.PAY).accepted());
+        assertTrue(workflowService.sendEvent(orderId, OrderEvents.PAYMENT_SUCCESS).accepted());
+        assertTrue(workflowService.sendEvent(orderId, OrderEvents.START_PREPARING).accepted());
+        assertTrue(workflowService.sendEvent(orderId, OrderEvents.DISPATCH).accepted());
+        assertTrue(workflowService.sendEvent(orderId, OrderEvents.DELIVER).accepted());
+
+        assertEquals(OrderStates.DELIVERED, workflowService.getOrderState(orderId));
+        assertTrue(workflowService.isReturnWindowOpen(orderId));
+        assertTrue(workflowService.getReturnWindowEndsAt(orderId) != null);
+        assertTrue(workflowService.getAvailableEvents(orderId).contains(OrderEvents.REQUEST_RETURN));
+
+        assertTrue(workflowService.sendEvent(orderId, OrderEvents.REQUEST_RETURN).accepted());
+        assertEquals(OrderStates.RETURN_REQUESTED, workflowService.getOrderState(orderId));
+        assertTrue(workflowService.sendEvent(orderId, OrderEvents.APPROVE_RETURN).accepted());
+        assertEquals(OrderStates.RETURN_APPROVED, workflowService.getOrderState(orderId));
+        assertTrue(workflowService.sendEvent(orderId, OrderEvents.RECEIVE_RETURN).accepted());
+        assertEquals(OrderStates.RETURNED, workflowService.getOrderState(orderId));
+        assertTrue(workflowService.getAvailableEvents(orderId).isEmpty());
+    }
 }

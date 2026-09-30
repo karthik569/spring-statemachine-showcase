@@ -8,5 +8,8 @@ public enum OrderStates {
     PREPARING,
     SHIPPED,
     DELIVERED,
+    RETURN_REQUESTED,
+    RETURN_APPROVED,
+    RETURNED,
     CANCELLED
 }

@@ -143,13 +143,14 @@ public class OrderWorkflowController {
         }
         OrderStates state = workflowService.getOrderState(orderId);
         var details = workflowService.getOrderDetails(orderId);
-        return ResponseEntity.ok(Map.of(
-                "orderId", orderId,
-                "currentState", state,
-                "paymentRetriesUsed", workflowService.getPaymentRetryCount(orderId),
-                "availableEvents", workflowService.getAvailableEvents(orderId),
-                "customer", details
-        ));
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("orderId", orderId);
+        response.put("currentState", state);
+        response.put("paymentRetriesUsed", workflowService.getPaymentRetryCount(orderId));
+        response.put("returnWindowEndsAt", workflowService.getReturnWindowEndsAt(orderId));
+        response.put("availableEvents", workflowService.getAvailableEvents(orderId));
+        response.put("customer", details);
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/{orderId}/available-events")
@@ -161,6 +162,7 @@ public class OrderWorkflowController {
                 "orderId", orderId,
                 "currentState", workflowService.getOrderState(orderId),
                 "paymentRetriesUsed", workflowService.getPaymentRetryCount(orderId),
+                "returnWindowOpen", workflowService.isReturnWindowOpen(orderId),
                 "availableEvents", workflowService.getAvailableEvents(orderId)
         ));
     }
@@ -218,12 +220,14 @@ public class OrderWorkflowController {
     public ResponseEntity<Map<String, Object>> getWorkflowSummary() {
         Map<OrderStates, Long> counts = workflowService.getOrderCountsByState();
         long delivered = counts.get(OrderStates.DELIVERED);
+        long returned = counts.get(OrderStates.RETURNED);
         long cancelled = counts.get(OrderStates.CANCELLED);
         long total = counts.values().stream().mapToLong(Long::longValue).sum();
         return ResponseEntity.ok(Map.of(
                 "totalOrders", total,
-                "activeOrders", total - delivered - cancelled,
+                "activeOrders", total - delivered - returned - cancelled,
                 "deliveredOrders", delivered,
+                "returnedOrders", returned,
                 "cancelledOrders", cancelled,
                 "ordersByState", counts
         ));

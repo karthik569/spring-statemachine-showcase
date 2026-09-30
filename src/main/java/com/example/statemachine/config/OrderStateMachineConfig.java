@@ -14,6 +14,7 @@ import org.springframework.statemachine.config.builders.StateMachineTransitionCo
 import org.springframework.statemachine.listener.StateMachineListenerAdapter;
 import org.springframework.statemachine.state.State;
 
+import java.time.Instant;
 import java.util.EnumSet;
 
 @Configuration
@@ -43,7 +44,7 @@ public class OrderStateMachineConfig extends EnumStateMachineConfigurerAdapter<O
                 .withStates()
                 .initial(OrderStates.SUBMITTED)
                 .states(EnumSet.allOf(OrderStates.class))
-                .end(OrderStates.DELIVERED)
+                .end(OrderStates.RETURNED)
                 .end(OrderStates.CANCELLED);
     }
 
@@ -92,6 +93,32 @@ public class OrderStateMachineConfig extends EnumStateMachineConfigurerAdapter<O
                 // SHIPPED -> DELIVERED
                 .withExternal()
                 .source(OrderStates.SHIPPED).target(OrderStates.DELIVERED).event(OrderEvents.DELIVER)
+                .action(context -> context.getExtendedState().getVariables()
+                        .put(OrderMachineVariables.DELIVERED_AT, Instant.now()))
+                .and()
+                // DELIVERED -> RETURN_REQUESTED, allowed only within the return window
+                .withExternal()
+                .source(OrderStates.DELIVERED).target(OrderStates.RETURN_REQUESTED)
+                .event(OrderEvents.REQUEST_RETURN)
+                .guard(context -> {
+                    Object deliveredAt = context.getExtendedState().getVariables()
+                            .get(OrderMachineVariables.DELIVERED_AT);
+                    return deliveredAt instanceof Instant instant
+                            && OrderMachineVariables.isReturnWindowOpen(instant, Instant.now());
+                })
+                .and()
+                // Return decision and completion
+                .withExternal()
+                .source(OrderStates.RETURN_REQUESTED).target(OrderStates.RETURN_APPROVED)
+                .event(OrderEvents.APPROVE_RETURN)
+                .and()
+                .withExternal()
+                .source(OrderStates.RETURN_REQUESTED).target(OrderStates.DELIVERED)
+                .event(OrderEvents.REJECT_RETURN)
+                .and()
+                .withExternal()
+                .source(OrderStates.RETURN_APPROVED).target(OrderStates.RETURNED)
+                .event(OrderEvents.RECEIVE_RETURN)
                 .and()
                 // Any cancellable state -> CANCELLED
                 .withExternal()

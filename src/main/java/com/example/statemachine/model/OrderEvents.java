@@ -8,5 +8,9 @@ public enum OrderEvents {
     START_PREPARING,
     DISPATCH,
     DELIVER,
+    REQUEST_RETURN,
+    APPROVE_RETURN,
+    REJECT_RETURN,
+    RECEIVE_RETURN,
     CANCEL
 }

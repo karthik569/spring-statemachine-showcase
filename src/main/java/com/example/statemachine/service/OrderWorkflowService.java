@@ -14,6 +14,7 @@ import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -76,6 +77,9 @@ public class OrderWorkflowService {
                     && previousState == OrderStates.PAYMENT_FAILED
                     && getPaymentRetryCount(orderId) >= OrderMachineVariables.MAX_PAYMENT_RETRIES) {
                 reason = "Maximum payment retries reached.";
+            } else if (!accepted && event == OrderEvents.REQUEST_RETURN
+                    && previousState == OrderStates.DELIVERED && !isReturnWindowOpen(orderId)) {
+                reason = "Return window expired.";
             } else if (!accepted) {
                 reason = "Event " + event + " is not valid from state " + previousState + ".";
             }
@@ -98,6 +102,22 @@ public class OrderWorkflowService {
         return retryCount instanceof Number number ? number.intValue() : 0;
     }
 
+    public Instant getReturnWindowEndsAt(String orderId) {
+        StateMachine<OrderStates, OrderEvents> sm = machines.get(orderId);
+        if (sm == null) {
+            return null;
+        }
+        Object deliveredAt = sm.getExtendedState().getVariables().get(OrderMachineVariables.DELIVERED_AT);
+        return deliveredAt instanceof Instant instant
+                ? instant.plus(OrderMachineVariables.RETURN_WINDOW_DAYS, ChronoUnit.DAYS)
+                : null;
+    }
+
+    public boolean isReturnWindowOpen(String orderId) {
+        Instant returnWindowEndsAt = getReturnWindowEndsAt(orderId);
+        return returnWindowEndsAt != null && Instant.now().isBefore(returnWindowEndsAt);
+    }
+
     public List<OrderEvents> getAvailableEvents(String orderId) {
         StateMachine<OrderStates, OrderEvents> sm = machines.get(orderId);
         if (sm == null) {
@@ -110,6 +130,7 @@ public class OrderWorkflowService {
                 .filter(Objects::nonNull)
                 .filter(event -> event != OrderEvents.RETRY_PAYMENT
                         || getPaymentRetryCount(orderId) < OrderMachineVariables.MAX_PAYMENT_RETRIES)
+                .filter(event -> event != OrderEvents.REQUEST_RETURN || isReturnWindowOpen(orderId))
                 .distinct()
                 .sorted()
                 .toList();
@@ -176,6 +197,7 @@ public class OrderWorkflowService {
                             Duration.between(lastActivityAt, now).getSeconds());
                 })
                 .filter(order -> order.currentState() != OrderStates.DELIVERED
+                        && order.currentState() != OrderStates.RETURNED
                         && order.currentState() != OrderStates.CANCELLED)
                 .filter(order -> order.lastActivityAt().isBefore(cutoff))
                 .sorted(java.util.Comparator.comparing(StaleOrder::lastActivityAt)

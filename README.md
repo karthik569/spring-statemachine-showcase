@@ -7,8 +7,8 @@ A production-grade finite state machine application managing lifecycle transitio
 ## 🌟 Comprehensive Method-by-Method Breakdown
 
 ### 1. [`OrderStateMachineConfig`](file:///sdcard/Download/termux/spring-statemachine-showcase/src/main/java/com/example/statemachine/config/OrderStateMachineConfig.java)
-- **`void configure(StateMachineStateConfigurer<OrderStates, OrderEvents> states)`**: Defines the finite state hierarchy, including the retryable `PAYMENT_FAILED` state and terminal `DELIVERED` and `CANCELLED` states.
-- **`void configure(StateMachineTransitionConfigurer<OrderStates, OrderEvents> transitions)`**: Configures lifecycle pathways and a guarded payment retry transition from `PAYMENT_FAILED` to `PAYMENT_PENDING`.
+- **`void configure(StateMachineStateConfigurer<OrderStates, OrderEvents> states)`**: Defines the finite state hierarchy, including payment failure and return states, with `RETURNED` and `CANCELLED` as terminal states.
+- **`void configure(StateMachineTransitionConfigurer<OrderStates, OrderEvents> transitions)`**: Configures lifecycle pathways, guarded payment retries, and the 30-day return-window guard.
 
 ### 2. [`OrderWorkflowController`](file:///sdcard/Download/termux/spring-statemachine-showcase/src/main/java/com/example/statemachine/controller/OrderWorkflowController.java)
 - **`ResponseEntity<Map<String, Object>> createOrder()`**: `POST /api/workflow/orders/create`; instantiates a new isolated state machine instance from `StateMachineFactory<OrderState, OrderEvent>` and sets initial state `SUBMITTED`.
@@ -54,10 +54,10 @@ curl -i -X POST "http://localhost:8087/api/workflow/orders/<ORDER_ID>/event?even
 
 - `GET /api/workflow/orders` lists in-memory orders and their current states.
 - `GET /api/workflow/orders?state=PREPARING` filters the order list by state.
-- `GET /api/workflow/orders/summary` returns total, active, delivered, and cancelled order counts, including counts for each state.
+- `GET /api/workflow/orders/summary` returns total, active, delivered, returned, and cancelled order counts, including counts for each state.
 - `GET /api/workflow/orders/stale?hours=24` finds non-terminal orders with no recorded activity for the requested number of hours. The threshold accepts 1–720 hours; results are ordered from longest inactive to shortest.
-- `GET /api/workflow/orders/{orderId}/state` returns the current state and the events currently allowed from it.
-- `GET /api/workflow/orders/{orderId}/available-events` returns the events currently allowed for an order.
+- `GET /api/workflow/orders/{orderId}/state` returns the current state, payment retry count, return deadline (when delivered), and the events currently allowed from it.
+- `GET /api/workflow/orders/{orderId}/available-events` returns events allowed by the current state and guards.
 - `GET /api/workflow/orders/{orderId}/history` returns its event history.
 - `GET /api/workflow/orders/{orderId}/history/search` filters history by event and/or acceptance and returns the newest matching entries, with a limit from 1 to 500 and a `hasMore` flag.
 - `GET /api/workflow/orders/details` lists orders with customer details and creation time.
@@ -94,6 +94,16 @@ curl -s "http://localhost:8087/api/workflow/orders/<ORDER_ID>/state"
 ```
 
 The order state response includes `paymentRetriesUsed`; rejected retry requests return HTTP 409 with the reason `Maximum payment retries reached.`
+
+### Guarded returns workflow
+
+When `DELIVER` moves a shipment into `DELIVERED`, the state machine records the delivery time and opens a 30-day return window. `REQUEST_RETURN` is available only before the deadline. A request can be approved with `APPROVE_RETURN`, then completed with `RECEIVE_RETURN`, which moves the order to terminal state `RETURNED`. A request can instead be rejected with `REJECT_RETURN`, returning the order to `DELIVERED`. The order state endpoint reports `returnWindowEndsAt`, and the available-events endpoint omits `REQUEST_RETURN` after expiry.
+
+```bash
+curl -i -X POST "http://localhost:8087/api/workflow/orders/<ORDER_ID>/event?event=REQUEST_RETURN"
+curl -i -X POST "http://localhost:8087/api/workflow/orders/<ORDER_ID>/event?event=APPROVE_RETURN"
+curl -i -X POST "http://localhost:8087/api/workflow/orders/<ORDER_ID>/event?event=RECEIVE_RETURN"
+```
 
 Find active orders that have been inactive for at least 48 hours:
 
