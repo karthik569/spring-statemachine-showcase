@@ -253,6 +253,25 @@ public class OrderWorkflowController {
         return ResponseEntity.ok(workflowService.getHistory(orderId));
     }
 
+    @GetMapping("/{orderId}/history/search")
+    public ResponseEntity<?> searchOrderHistory(
+            @PathVariable String orderId,
+            @RequestParam(required = false) OrderEvents event,
+            @RequestParam(required = false) Boolean accepted,
+            @RequestParam(defaultValue = "100") int limit) {
+        if (!workflowService.orderExists(orderId)) {
+            return ResponseEntity.notFound().build();
+        }
+        if (limit < 1 || limit > 500) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "limit must be between 1 and 500"));
+        }
+
+        var page = workflowService.getHistory(orderId, event, accepted, limit);
+        return ResponseEntity.ok(new HistorySearchResponse(orderId, event, accepted, limit,
+                page.totalEntries(), page.totalEntries() > page.entries().size(), page.entries()));
+    }
+
     public record CreateOrderRequest(
             @NotBlank(message = "must not be blank")
             @Size(max = 120, message = "must be at most 120 characters")
@@ -281,6 +300,11 @@ public class OrderWorkflowController {
     public record StaleOrderView(String orderId, OrderStates currentState, String customerName,
                                  String customerEmail, java.time.Instant createdAt,
                                  java.time.Instant lastActivityAt, long inactiveForSeconds) {
+    }
+
+    public record HistorySearchResponse(String orderId, OrderEvents event, Boolean accepted, int limit,
+                                        int totalEntries, boolean hasMore,
+                                        List<OrderWorkflowService.TransitionRecord> entries) {
     }
 
     public record OrderView(String orderId, OrderStates currentState, String customerName,

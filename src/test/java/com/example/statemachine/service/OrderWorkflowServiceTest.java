@@ -5,8 +5,10 @@ import com.example.statemachine.model.OrderStates;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.statemachine.StateMachine;
+import org.springframework.statemachine.StateMachineEventResult;
 import org.springframework.statemachine.config.StateMachineFactory;
 import org.springframework.statemachine.state.State;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
@@ -15,6 +17,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -53,5 +56,23 @@ class OrderWorkflowServiceTest {
 
         currentState.set(OrderStates.DELIVERED);
         assertTrue(workflowService.getStaleOrders(Duration.ZERO).isEmpty());
+    }
+
+    @Test
+    void filtersHistoryAndReturnsTheMostRecentMatchingEntries() {
+        @SuppressWarnings("unchecked")
+        StateMachineEventResult<OrderStates, OrderEvents> acceptedResult = mock(StateMachineEventResult.class);
+        when(acceptedResult.getResultType()).thenReturn(StateMachineEventResult.ResultType.ACCEPTED);
+        when(stateMachine.sendEvent(any(Mono.class))).thenReturn(Flux.just(acceptedResult));
+        workflowService.sendEvent("ORD-STALE", OrderEvents.PAY);
+        workflowService.sendEvent("ORD-STALE", OrderEvents.CANCEL);
+        workflowService.sendEvent("ORD-STALE", OrderEvents.PAY);
+
+        var historyPage = workflowService.getHistory("ORD-STALE", OrderEvents.PAY, true, 1);
+
+        assertEquals(2, historyPage.totalEntries());
+        assertEquals(1, historyPage.entries().size());
+        assertEquals(OrderEvents.PAY, historyPage.entries().get(0).event());
+        assertTrue(historyPage.entries().get(0).accepted());
     }
 }

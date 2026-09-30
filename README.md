@@ -59,6 +59,7 @@ curl -i -X POST "http://localhost:8087/api/workflow/orders/<ORDER_ID>/event?even
 - `GET /api/workflow/orders/{orderId}/state` returns the current state and the events currently allowed from it.
 - `GET /api/workflow/orders/{orderId}/available-events` returns the events currently allowed for an order.
 - `GET /api/workflow/orders/{orderId}/history` returns its event history.
+- `GET /api/workflow/orders/{orderId}/history/search` filters history by event and/or acceptance and returns the newest matching entries, with a limit from 1 to 500 and a `hasMore` flag.
 - `GET /api/workflow/orders/details` lists orders with customer details and creation time.
 - `GET /api/workflow/orders/details?page=0&size=20` returns a paginated, newest-first order list. `size` accepts values from 1 to 100.
 - `GET /api/workflow/orders/details?state=PREPARING` filters detailed results by workflow state.
@@ -89,6 +90,14 @@ curl -s "http://localhost:8087/api/workflow/orders/stale?hours=48"
 ```
 
 Each result includes the current state, customer details, creation time, last recorded event time, and inactive duration in seconds. Orders in `DELIVERED` or `CANCELLED` are excluded.
+
+Search the latest accepted `PAY` history entries for an order:
+
+```bash
+curl -s "http://localhost:8087/api/workflow/orders/ORD-12345678/history/search?event=PAY&accepted=true&limit=25"
+```
+
+The response includes the filter values, total number of matching entries, the selected entries in chronological order, and `hasMore` when older matching history exists.
 
 Send a lifecycle event to multiple orders in one request:
 

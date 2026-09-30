@@ -175,8 +175,20 @@ public class OrderWorkflowService {
         return records == null ? List.of() : List.copyOf(records);
     }
 
+    public HistoryPage getHistory(String orderId, OrderEvents event, Boolean accepted, int limit) {
+        List<TransitionRecord> matching = getHistory(orderId).stream()
+                .filter(record -> event == null || record.event() == event)
+                .filter(record -> accepted == null || record.accepted() == accepted)
+                .toList();
+        int firstEntry = Math.max(0, matching.size() - limit);
+        return new HistoryPage(matching.subList(firstEntry, matching.size()), matching.size());
+    }
+
     public record TransitionRecord(Instant timestamp, OrderEvents event, OrderStates previousState,
                                    OrderStates currentState, boolean accepted) {
+    }
+
+    public record HistoryPage(List<TransitionRecord> entries, int totalEntries) {
     }
 
     public record EventOutcome(boolean accepted, String reason) {
