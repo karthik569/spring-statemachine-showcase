@@ -6,6 +6,8 @@ import com.example.statemachine.service.OrderWorkflowService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.HashSet;
 import java.util.stream.Collectors;
 import java.util.UUID;
 
@@ -99,6 +102,31 @@ public class OrderWorkflowController {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
         }
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/events/bulk")
+    public ResponseEntity<?> triggerBulkEvent(@Valid @RequestBody BulkEventRequest request) {
+        if (new HashSet<>(request.orderIds()).size() != request.orderIds().size()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "orderIds must not contain duplicates"));
+        }
+
+        List<BulkEventResult> results = request.orderIds().stream().map(orderId -> {
+            if (!workflowService.orderExists(orderId)) {
+                return new BulkEventResult(orderId, "NOT_FOUND", null, null, false,
+                        "Order was not found.");
+            }
+
+            OrderStates previousState = workflowService.getOrderState(orderId);
+            var outcome = workflowService.sendEvent(orderId, request.event());
+            OrderStates currentState = workflowService.getOrderState(orderId);
+            return new BulkEventResult(orderId, outcome.accepted() ? "ACCEPTED" : "REJECTED",
+                    previousState, currentState, outcome.accepted(), outcome.reason());
+        }).toList();
+
+        long acceptedCount = results.stream().filter(BulkEventResult::transitionAccepted).count();
+        return ResponseEntity.ok(new BulkEventResponse(request.event(), results, results.size(),
+                acceptedCount, results.size() - acceptedCount));
     }
 
     /**
@@ -214,6 +242,21 @@ public class OrderWorkflowController {
             @Email(message = "must be a valid email address")
             @Size(max = 254, message = "must be at most 254 characters")
             String customerEmail) {
+    }
+
+    public record BulkEventRequest(
+            @NotEmpty(message = "must contain at least one order ID")
+            @Size(max = 100, message = "must contain at most 100 order IDs")
+            List<@NotBlank(message = "must not be blank") String> orderIds,
+            @NotNull(message = "must not be null") OrderEvents event) {
+    }
+
+    public record BulkEventResponse(OrderEvents event, List<BulkEventResult> results,
+                                    int totalOrders, long acceptedCount, long rejectedCount) {
+    }
+
+    public record BulkEventResult(String orderId, String status, OrderStates previousState,
+                                  OrderStates currentState, boolean transitionAccepted, String reason) {
     }
 
     public record OrderView(String orderId, OrderStates currentState, String customerName,

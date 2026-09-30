@@ -65,6 +65,7 @@ curl -i -X POST "http://localhost:8087/api/workflow/orders/<ORDER_ID>/event?even
 - The detailed listing response includes `totalOrders`, `totalPages`, `hasNext`, and `hasPrevious` pagination metadata.
 - `GET /api/workflow/orders/{orderId}/details` returns one order's details.
 - `POST /api/workflow/orders/{orderId}/event?event=...` returns HTTP 409 with the current state and allowed events when the requested transition is not valid.
+- `POST /api/workflow/orders/events/bulk` applies one event to up to 100 orders and returns a result for each order, including missing orders and invalid transitions.
 
 Create an order with optional customer data by posting JSON to `/api/workflow/orders/create`:
 
@@ -79,6 +80,16 @@ The existing empty-body create request remains supported.
 When supplied, `customerName` must contain 1–120 characters and `customerEmail` must be a valid email address of at most 254 characters. Invalid fields return HTTP 400 with an `errors` object keyed by field name.
 
 Orders can be cancelled while `SUBMITTED`, `PAYMENT_PENDING`, `PAID`, or `PREPARING`. Once dispatched, an order can no longer be cancelled through this workflow.
+
+Send a lifecycle event to multiple orders in one request:
+
+```bash
+curl -i -X POST http://localhost:8087/api/workflow/orders/events/bulk \
+  -H "Content-Type: application/json" \
+  -d '{"orderIds":["ORD-12345678","ORD-87654321"],"event":"CANCEL"}'
+```
+
+The request accepts 1–100 unique, non-blank order IDs and one event. Each result reports `ACCEPTED`, `REJECTED` (invalid from the current state), or `NOT_FOUND`; one failure does not prevent the other orders from being processed. The response includes accepted and rejected counts.
 
 ## Logging
 
