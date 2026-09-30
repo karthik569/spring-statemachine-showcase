@@ -1,6 +1,7 @@
 package com.example.statemachine.service;
 
 import com.example.statemachine.model.OrderEvents;
+import com.example.statemachine.model.OrderMachineVariables;
 import com.example.statemachine.model.OrderStates;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,6 +41,7 @@ public class OrderWorkflowService {
 
     public StateMachine<OrderStates, OrderEvents> createOrder(String orderId, String customerName, String customerEmail) {
         StateMachine<OrderStates, OrderEvents> sm = stateMachineFactory.getStateMachine(orderId);
+        sm.getExtendedState().getVariables().put(OrderMachineVariables.PAYMENT_RETRY_COUNT, 0);
         sm.startReactively().subscribe();
         machines.put(orderId, sm);
         history.put(orderId, new CopyOnWriteArrayList<>());
@@ -64,11 +66,19 @@ public class OrderWorkflowService {
             var message = MessageBuilder.withPayload(event).setHeader("orderId", orderId).build();
             StateMachineEventResult<OrderStates, OrderEvents> result =
                     sm.sendEvent(Mono.just(message)).blockLast();
-            boolean accepted = result != null
-                    && result.getResultType() == StateMachineEventResult.ResultType.ACCEPTED;
             OrderStates currentState = sm.getState().getId();
+            boolean accepted = result != null
+                    && result.getResultType() == StateMachineEventResult.ResultType.ACCEPTED
+                    && currentState != previousState;
             history.get(orderId).add(new TransitionRecord(Instant.now(), event, previousState, currentState, accepted));
-            String reason = accepted ? null : "Event " + event + " is not valid from state " + previousState + ".";
+            String reason = null;
+            if (!accepted && event == OrderEvents.RETRY_PAYMENT
+                    && previousState == OrderStates.PAYMENT_FAILED
+                    && getPaymentRetryCount(orderId) >= OrderMachineVariables.MAX_PAYMENT_RETRIES) {
+                reason = "Maximum payment retries reached.";
+            } else if (!accepted) {
+                reason = "Event " + event + " is not valid from state " + previousState + ".";
+            }
             return new EventOutcome(accepted, reason);
         }
     }
@@ -76,6 +86,16 @@ public class OrderWorkflowService {
     public OrderStates getOrderState(String orderId) {
         StateMachine<OrderStates, OrderEvents> sm = machines.get(orderId);
         return sm != null ? sm.getState().getId() : null;
+    }
+
+    public int getPaymentRetryCount(String orderId) {
+        StateMachine<OrderStates, OrderEvents> sm = machines.get(orderId);
+        if (sm == null) {
+            return 0;
+        }
+        Object retryCount = sm.getExtendedState().getVariables()
+                .get(OrderMachineVariables.PAYMENT_RETRY_COUNT);
+        return retryCount instanceof Number number ? number.intValue() : 0;
     }
 
     public List<OrderEvents> getAvailableEvents(String orderId) {
@@ -88,6 +108,8 @@ public class OrderWorkflowService {
                 .filter(transition -> transition.getSource().getId() == currentState)
                 .map(transition -> transition.getTrigger() == null ? null : transition.getTrigger().getEvent())
                 .filter(Objects::nonNull)
+                .filter(event -> event != OrderEvents.RETRY_PAYMENT
+                        || getPaymentRetryCount(orderId) < OrderMachineVariables.MAX_PAYMENT_RETRIES)
                 .distinct()
                 .sorted()
                 .toList();

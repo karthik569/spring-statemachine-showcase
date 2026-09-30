@@ -1,6 +1,7 @@
 package com.example.statemachine.config;
 
 import com.example.statemachine.model.OrderEvents;
+import com.example.statemachine.model.OrderMachineVariables;
 import com.example.statemachine.model.OrderStates;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,9 +58,28 @@ public class OrderStateMachineConfig extends EnumStateMachineConfigurerAdapter<O
                 .withExternal()
                 .source(OrderStates.PAYMENT_PENDING).target(OrderStates.PAID).event(OrderEvents.PAYMENT_SUCCESS)
                 .and()
-                // PAYMENT_PENDING -> CANCELLED (on failure)
+                // PAYMENT_PENDING -> PAYMENT_FAILED (on failure)
                 .withExternal()
-                .source(OrderStates.PAYMENT_PENDING).target(OrderStates.CANCELLED).event(OrderEvents.PAYMENT_FAILED)
+                .source(OrderStates.PAYMENT_PENDING).target(OrderStates.PAYMENT_FAILED).event(OrderEvents.PAYMENT_FAILED)
+                .and()
+                // PAYMENT_FAILED -> PAYMENT_PENDING, guarded by the per-order retry limit
+                .withExternal()
+                .source(OrderStates.PAYMENT_FAILED).target(OrderStates.PAYMENT_PENDING)
+                .event(OrderEvents.RETRY_PAYMENT)
+                .guard(context -> {
+                    Object retryCount = context.getExtendedState().getVariables()
+                            .get(OrderMachineVariables.PAYMENT_RETRY_COUNT);
+                    return retryCount instanceof Number number
+                            && number.intValue() < OrderMachineVariables.MAX_PAYMENT_RETRIES;
+                })
+                .action(context -> {
+                    var variables = context.getExtendedState().getVariables();
+                    Object retryCount = variables.get(OrderMachineVariables.PAYMENT_RETRY_COUNT);
+                    int nextCount = (retryCount instanceof Number number ? number.intValue() : 0) + 1;
+                    variables.put(OrderMachineVariables.PAYMENT_RETRY_COUNT, nextCount);
+                    log.info("[STATE-MACHINE] Payment retry {} of {}", nextCount,
+                            OrderMachineVariables.MAX_PAYMENT_RETRIES);
+                })
                 .and()
                 // PAID -> PREPARING
                 .withExternal()
@@ -79,6 +99,9 @@ public class OrderStateMachineConfig extends EnumStateMachineConfigurerAdapter<O
                 .and()
                 .withExternal()
                 .source(OrderStates.PAYMENT_PENDING).target(OrderStates.CANCELLED).event(OrderEvents.CANCEL)
+                .and()
+                .withExternal()
+                .source(OrderStates.PAYMENT_FAILED).target(OrderStates.CANCELLED).event(OrderEvents.CANCEL)
                 .and()
                 .withExternal()
                 .source(OrderStates.PAID).target(OrderStates.CANCELLED).event(OrderEvents.CANCEL)

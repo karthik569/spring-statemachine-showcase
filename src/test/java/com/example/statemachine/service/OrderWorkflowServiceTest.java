@@ -7,15 +7,19 @@ import org.junit.jupiter.api.Test;
 import org.springframework.statemachine.StateMachine;
 import org.springframework.statemachine.StateMachineEventResult;
 import org.springframework.statemachine.config.StateMachineFactory;
+import org.springframework.statemachine.ExtendedState;
 import org.springframework.statemachine.state.State;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -26,6 +30,8 @@ class OrderWorkflowServiceTest {
     private final StateMachineFactory<OrderStates, OrderEvents> stateMachineFactory = mock(StateMachineFactory.class);
     private final StateMachine<OrderStates, OrderEvents> stateMachine = mock(StateMachine.class);
     private final State<OrderStates, OrderEvents> state = mock(State.class);
+    private final ExtendedState extendedState = mock(ExtendedState.class);
+    private final Map<Object, Object> variables = new ConcurrentHashMap<>();
     private final AtomicReference<OrderStates> currentState = new AtomicReference<>(OrderStates.SUBMITTED);
     private OrderWorkflowService workflowService;
 
@@ -34,6 +40,8 @@ class OrderWorkflowServiceTest {
         when(stateMachineFactory.getStateMachine("ORD-STALE")).thenReturn(stateMachine);
         when(stateMachine.startReactively()).thenReturn(Mono.empty());
         when(stateMachine.getState()).thenReturn(state);
+        when(stateMachine.getExtendedState()).thenReturn(extendedState);
+        when(extendedState.getVariables()).thenReturn(variables);
         when(state.getId()).thenAnswer(invocation -> currentState.get());
         workflowService = new OrderWorkflowService(stateMachineFactory);
         workflowService.createOrder("ORD-STALE", "Asha Rao", "asha@example.com");
@@ -68,11 +76,11 @@ class OrderWorkflowServiceTest {
         workflowService.sendEvent("ORD-STALE", OrderEvents.CANCEL);
         workflowService.sendEvent("ORD-STALE", OrderEvents.PAY);
 
-        var historyPage = workflowService.getHistory("ORD-STALE", OrderEvents.PAY, true, 1);
+        var historyPage = workflowService.getHistory("ORD-STALE", OrderEvents.PAY, false, 1);
 
         assertEquals(2, historyPage.totalEntries());
         assertEquals(1, historyPage.entries().size());
         assertEquals(OrderEvents.PAY, historyPage.entries().get(0).event());
-        assertTrue(historyPage.entries().get(0).accepted());
+        assertFalse(historyPage.entries().get(0).accepted());
     }
 }

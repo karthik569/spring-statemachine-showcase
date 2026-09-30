@@ -7,8 +7,8 @@ A production-grade finite state machine application managing lifecycle transitio
 ## 🌟 Comprehensive Method-by-Method Breakdown
 
 ### 1. [`OrderStateMachineConfig`](file:///sdcard/Download/termux/spring-statemachine-showcase/src/main/java/com/example/statemachine/config/OrderStateMachineConfig.java)
-- **`void configure(StateMachineStateConfigurer<OrderState, OrderEvent> states)`**: Defines the finite state hierarchy (`SUBMITTED` initial, `PAYMENT_PENDING`, `PAID`, `PREPARING`, `SHIPPED`, `DELIVERED` terminal, `CANCELLED` terminal).
-- **`void configure(StateMachineTransitionConfigurer<OrderState, OrderEvent> transitions)`**: Configures deterministic transition pathways (e.g. `SUBMITTED -> PAY -> PAYMENT_PENDING`, `PAYMENT_PENDING -> PAYMENT_SUCCESS -> PAID`, etc.) and attaches condition guards.
+- **`void configure(StateMachineStateConfigurer<OrderStates, OrderEvents> states)`**: Defines the finite state hierarchy, including the retryable `PAYMENT_FAILED` state and terminal `DELIVERED` and `CANCELLED` states.
+- **`void configure(StateMachineTransitionConfigurer<OrderStates, OrderEvents> transitions)`**: Configures lifecycle pathways and a guarded payment retry transition from `PAYMENT_FAILED` to `PAYMENT_PENDING`.
 
 ### 2. [`OrderWorkflowController`](file:///sdcard/Download/termux/spring-statemachine-showcase/src/main/java/com/example/statemachine/controller/OrderWorkflowController.java)
 - **`ResponseEntity<Map<String, Object>> createOrder()`**: `POST /api/workflow/orders/create`; instantiates a new isolated state machine instance from `StateMachineFactory<OrderState, OrderEvent>` and sets initial state `SUBMITTED`.
@@ -81,7 +81,19 @@ The existing empty-body create request remains supported.
 
 When supplied, `customerName` must contain 1–120 characters and `customerEmail` must be a valid email address of at most 254 characters. Invalid fields return HTTP 400 with an `errors` object keyed by field name.
 
-Orders can be cancelled while `SUBMITTED`, `PAYMENT_PENDING`, `PAID`, or `PREPARING`. Once dispatched, an order can no longer be cancelled through this workflow.
+Orders can be cancelled while `SUBMITTED`, `PAYMENT_PENDING`, `PAYMENT_FAILED`, `PAID`, or `PREPARING`. Once dispatched, an order can no longer be cancelled through this workflow.
+
+### Guarded payment retries
+
+When `PAYMENT_FAILED` is received in `PAYMENT_PENDING`, the machine moves to the non-terminal `PAYMENT_FAILED` state. From there, `RETRY_PAYMENT` returns the order to `PAYMENT_PENDING` while fewer than three retries have been used. The retry count is stored in the state machine's extended state per order. After the third retry, the guard rejects further retries, and `RETRY_PAYMENT` no longer appears in the available events. Failed-payment orders can still be cancelled with `CANCEL`.
+
+```bash
+curl -i -X POST "http://localhost:8087/api/workflow/orders/<ORDER_ID>/event?event=PAYMENT_FAILED"
+curl -i -X POST "http://localhost:8087/api/workflow/orders/<ORDER_ID>/event?event=RETRY_PAYMENT"
+curl -s "http://localhost:8087/api/workflow/orders/<ORDER_ID>/state"
+```
+
+The order state response includes `paymentRetriesUsed`; rejected retry requests return HTTP 409 with the reason `Maximum payment retries reached.`
 
 Find active orders that have been inactive for at least 48 hours:
 

@@ -146,6 +146,7 @@ public class OrderWorkflowController {
         return ResponseEntity.ok(Map.of(
                 "orderId", orderId,
                 "currentState", state,
+                "paymentRetriesUsed", workflowService.getPaymentRetryCount(orderId),
                 "availableEvents", workflowService.getAvailableEvents(orderId),
                 "customer", details
         ));
@@ -159,6 +160,7 @@ public class OrderWorkflowController {
         return ResponseEntity.ok(Map.of(
                 "orderId", orderId,
                 "currentState", workflowService.getOrderState(orderId),
+                "paymentRetriesUsed", workflowService.getPaymentRetryCount(orderId),
                 "availableEvents", workflowService.getAvailableEvents(orderId)
         ));
     }
