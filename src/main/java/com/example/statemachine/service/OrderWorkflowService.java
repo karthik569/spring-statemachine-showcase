@@ -113,18 +113,31 @@ public class OrderWorkflowService {
                 .toList();
     }
 
-    public List<OrderDetails> getOrdersWithDetails(OrderStates state, int page, int size) {
+    public List<OrderDetails> getOrdersWithDetails(OrderStates state, String query, int page, int size) {
+        String normalizedQuery = query == null ? "" : query.trim().toLowerCase();
         return getOrdersWithDetails().stream()
                 .filter(details -> state == null || getOrderState(details.orderId()) == state)
+                .filter(details -> normalizedQuery.isBlank()
+                        || contains(details.customerName(), normalizedQuery)
+                        || contains(details.customerEmail(), normalizedQuery)
+                        || details.orderId().toLowerCase().contains(normalizedQuery))
                 .skip((long) page * size)
                 .limit(size)
                 .toList();
     }
 
-    public long countOrders(OrderStates state) {
+    public long countOrders(OrderStates state, String query) {
+        String normalizedQuery = query == null ? "" : query.trim().toLowerCase();
         return orderDetails.keySet().stream()
                 .filter(orderId -> state == null || getOrderState(orderId) == state)
+                .filter(orderId -> normalizedQuery.isBlank() || contains(orderId, normalizedQuery)
+                        || contains(orderDetails.get(orderId).customerName(), normalizedQuery)
+                        || contains(orderDetails.get(orderId).customerEmail(), normalizedQuery))
                 .count();
+    }
+
+    private boolean contains(String value, String query) {
+        return value != null && value.toLowerCase().contains(query);
     }
 
     public Map<OrderStates, Long> getOrderCountsByState() {
