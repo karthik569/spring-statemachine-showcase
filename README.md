@@ -59,6 +59,10 @@ curl -i -X POST "http://localhost:8087/api/workflow/orders/<ORDER_ID>/event?even
 - `GET /api/workflow/orders/{orderId}/available-events` returns the events currently allowed for an order.
 - `GET /api/workflow/orders/{orderId}/history` returns its event history.
 - `GET /api/workflow/orders/details` lists orders with customer details and creation time.
+- `GET /api/workflow/orders/details?page=0&size=20` returns a paginated, newest-first order list. `size` accepts values from 1 to 100.
+- `GET /api/workflow/orders/details?state=PREPARING` filters detailed results by workflow state.
+- `GET /api/workflow/orders/details?q=asha` searches order IDs, customer names, and customer email addresses case-insensitively.
+- The detailed listing response includes `totalOrders`, `totalPages`, `hasNext`, and `hasPrevious` pagination metadata.
 - `GET /api/workflow/orders/{orderId}/details` returns one order's details.
 - `POST /api/workflow/orders/{orderId}/event?event=...` returns HTTP 409 with the current state and allowed events when the requested transition is not valid.
 
@@ -75,3 +79,28 @@ The existing empty-body create request remains supported.
 When supplied, `customerName` must contain 1–120 characters and `customerEmail` must be a valid email address of at most 254 characters. Invalid fields return HTTP 400 with an `errors` object keyed by field name.
 
 Orders can be cancelled while `SUBMITTED`, `PAYMENT_PENDING`, `PAID`, or `PREPARING`. Once dispatched, an order can no longer be cancelled through this workflow.
+
+## Logging
+
+Application logs are written to `logs/application.log` in addition to the terminal output when the app is started with `mvn spring-boot:run`.
+
+## Detailed listing example
+
+```bash
+curl -s "http://localhost:8087/api/workflow/orders/details?q=asha&state=PAID&page=0&size=10"
+```
+
+The response has this shape:
+
+```json
+{
+  "orders": [],
+  "page": 0,
+  "size": 10,
+  "query": "asha",
+  "totalOrders": 0,
+  "totalPages": 0,
+  "hasNext": false,
+  "hasPrevious": false
+}
+```
