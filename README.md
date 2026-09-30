@@ -8,7 +8,7 @@ A production-grade finite state machine application managing lifecycle transitio
 
 ### 1. [`OrderStateMachineConfig`](file:///sdcard/Download/termux/spring-statemachine-showcase/src/main/java/com/example/statemachine/config/OrderStateMachineConfig.java)
 - **`void configure(StateMachineStateConfigurer<OrderStates, OrderEvents> states)`**: Defines the finite state hierarchy, including payment failure and return states, with `RETURNED` and `CANCELLED` as terminal states.
-- **`void configure(StateMachineTransitionConfigurer<OrderStates, OrderEvents> transitions)`**: Configures lifecycle pathways, guarded payment retries, and the 30-day return-window guard.
+- **`void configure(StateMachineTransitionConfigurer<OrderStates, OrderEvents> transitions)`**: Configures lifecycle pathways, guarded payment and dispatch retries, and the 30-day return-window guard.
 
 ### 2. [`OrderWorkflowController`](file:///sdcard/Download/termux/spring-statemachine-showcase/src/main/java/com/example/statemachine/controller/OrderWorkflowController.java)
 - **`ResponseEntity<Map<String, Object>> createOrder()`**: `POST /api/workflow/orders/create`; instantiates a new isolated state machine instance from `StateMachineFactory<OrderState, OrderEvent>` and sets initial state `SUBMITTED`.
@@ -56,7 +56,7 @@ curl -i -X POST "http://localhost:8087/api/workflow/orders/<ORDER_ID>/event?even
 - `GET /api/workflow/orders?state=PREPARING` filters the order list by state.
 - `GET /api/workflow/orders/summary` returns total, active, delivered, returned, and cancelled order counts, including counts for each state.
 - `GET /api/workflow/orders/stale?hours=24` finds non-terminal orders with no recorded activity for the requested number of hours. The threshold accepts 1–720 hours; results are ordered from longest inactive to shortest.
-- `GET /api/workflow/orders/{orderId}/state` returns the current state, payment retry count, return deadline (when delivered), and the events currently allowed from it.
+- `GET /api/workflow/orders/{orderId}/state` returns the current state, payment and dispatch retry counts, return deadline (when delivered), and the events currently allowed from it.
 - `GET /api/workflow/orders/{orderId}/available-events` returns events allowed by the current state and guards.
 - `GET /api/workflow/orders/{orderId}/history` returns its event history.
 - `GET /api/workflow/orders/{orderId}/history/search` filters history by event and/or acceptance and returns the newest matching entries, with a limit from 1 to 500 and a `hasMore` flag.
@@ -81,7 +81,7 @@ The existing empty-body create request remains supported.
 
 When supplied, `customerName` must contain 1–120 characters and `customerEmail` must be a valid email address of at most 254 characters. Invalid fields return HTTP 400 with an `errors` object keyed by field name.
 
-Orders can be cancelled while `SUBMITTED`, `PAYMENT_PENDING`, `PAYMENT_FAILED`, `PAID`, or `PREPARING`. Once dispatched, an order can no longer be cancelled through this workflow.
+Orders can be cancelled while `SUBMITTED`, `PAYMENT_PENDING`, `PAYMENT_FAILED`, `PAID`, `PREPARING`, or `DISPATCH_FAILED`. Once dispatched, an order can no longer be cancelled through this workflow.
 
 ### Guarded payment retries
 
@@ -94,6 +94,16 @@ curl -s "http://localhost:8087/api/workflow/orders/<ORDER_ID>/state"
 ```
 
 The order state response includes `paymentRetriesUsed`; rejected retry requests return HTTP 409 with the reason `Maximum payment retries reached.`
+
+### Guarded dispatch retries
+
+If carrier handoff fails in `PREPARING`, `DISPATCH_FAILED` moves the order into `DISPATCH_FAILED`. `RETRY_DISPATCH` returns it to `PREPARING`, where dispatch can be attempted again. Each order gets at most three retries. When the limit is reached, the guard rejects further retries, the retry event disappears from available events, and the order can still be cancelled. The state response includes `dispatchRetriesUsed`.
+
+```bash
+curl -i -X POST "http://localhost:8087/api/workflow/orders/<ORDER_ID>/event?event=DISPATCH_FAILED"
+curl -i -X POST "http://localhost:8087/api/workflow/orders/<ORDER_ID>/event?event=RETRY_DISPATCH"
+curl -s "http://localhost:8087/api/workflow/orders/<ORDER_ID>/state"
+```
 
 ### Guarded returns workflow
 

@@ -147,6 +147,7 @@ public class OrderWorkflowController {
         response.put("orderId", orderId);
         response.put("currentState", state);
         response.put("paymentRetriesUsed", workflowService.getPaymentRetryCount(orderId));
+        response.put("dispatchRetriesUsed", workflowService.getDispatchRetryCount(orderId));
         response.put("returnWindowEndsAt", workflowService.getReturnWindowEndsAt(orderId));
         response.put("availableEvents", workflowService.getAvailableEvents(orderId));
         response.put("customer", details);
@@ -162,6 +163,7 @@ public class OrderWorkflowController {
                 "orderId", orderId,
                 "currentState", workflowService.getOrderState(orderId),
                 "paymentRetriesUsed", workflowService.getPaymentRetryCount(orderId),
+                "dispatchRetriesUsed", workflowService.getDispatchRetryCount(orderId),
                 "returnWindowOpen", workflowService.isReturnWindowOpen(orderId),
                 "availableEvents", workflowService.getAvailableEvents(orderId)
         ));

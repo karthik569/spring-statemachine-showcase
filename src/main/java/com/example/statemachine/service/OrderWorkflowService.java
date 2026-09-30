@@ -43,6 +43,7 @@ public class OrderWorkflowService {
     public StateMachine<OrderStates, OrderEvents> createOrder(String orderId, String customerName, String customerEmail) {
         StateMachine<OrderStates, OrderEvents> sm = stateMachineFactory.getStateMachine(orderId);
         sm.getExtendedState().getVariables().put(OrderMachineVariables.PAYMENT_RETRY_COUNT, 0);
+        sm.getExtendedState().getVariables().put(OrderMachineVariables.DISPATCH_RETRY_COUNT, 0);
         sm.startReactively().subscribe();
         machines.put(orderId, sm);
         history.put(orderId, new CopyOnWriteArrayList<>());
@@ -77,6 +78,10 @@ public class OrderWorkflowService {
                     && previousState == OrderStates.PAYMENT_FAILED
                     && getPaymentRetryCount(orderId) >= OrderMachineVariables.MAX_PAYMENT_RETRIES) {
                 reason = "Maximum payment retries reached.";
+            } else if (!accepted && event == OrderEvents.RETRY_DISPATCH
+                    && previousState == OrderStates.DISPATCH_FAILED
+                    && getDispatchRetryCount(orderId) >= OrderMachineVariables.MAX_DISPATCH_RETRIES) {
+                reason = "Maximum dispatch retries reached.";
             } else if (!accepted && event == OrderEvents.REQUEST_RETURN
                     && previousState == OrderStates.DELIVERED && !isReturnWindowOpen(orderId)) {
                 reason = "Return window expired.";
@@ -99,6 +104,16 @@ public class OrderWorkflowService {
         }
         Object retryCount = sm.getExtendedState().getVariables()
                 .get(OrderMachineVariables.PAYMENT_RETRY_COUNT);
+        return retryCount instanceof Number number ? number.intValue() : 0;
+    }
+
+    public int getDispatchRetryCount(String orderId) {
+        StateMachine<OrderStates, OrderEvents> sm = machines.get(orderId);
+        if (sm == null) {
+            return 0;
+        }
+        Object retryCount = sm.getExtendedState().getVariables()
+                .get(OrderMachineVariables.DISPATCH_RETRY_COUNT);
         return retryCount instanceof Number number ? number.intValue() : 0;
     }
 
@@ -130,6 +145,8 @@ public class OrderWorkflowService {
                 .filter(Objects::nonNull)
                 .filter(event -> event != OrderEvents.RETRY_PAYMENT
                         || getPaymentRetryCount(orderId) < OrderMachineVariables.MAX_PAYMENT_RETRIES)
+                .filter(event -> event != OrderEvents.RETRY_DISPATCH
+                        || getDispatchRetryCount(orderId) < OrderMachineVariables.MAX_DISPATCH_RETRIES)
                 .filter(event -> event != OrderEvents.REQUEST_RETURN || isReturnWindowOpen(orderId))
                 .distinct()
                 .sorted()

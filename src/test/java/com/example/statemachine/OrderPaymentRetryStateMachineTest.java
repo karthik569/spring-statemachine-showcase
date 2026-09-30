@@ -73,4 +73,32 @@ class OrderPaymentRetryStateMachineTest {
         assertEquals(OrderStates.RETURNED, workflowService.getOrderState(orderId));
         assertTrue(workflowService.getAvailableEvents(orderId).isEmpty());
     }
+
+    @Test
+    void failedDispatchCanBeRetriedUpToThreeTimesThenCancelled() {
+        String orderId = "ORD-DISPATCH-" + UUID.randomUUID();
+        workflowService.createOrder(orderId);
+        assertTrue(workflowService.sendEvent(orderId, OrderEvents.PAY).accepted());
+        assertTrue(workflowService.sendEvent(orderId, OrderEvents.PAYMENT_SUCCESS).accepted());
+        assertTrue(workflowService.sendEvent(orderId, OrderEvents.START_PREPARING).accepted());
+
+        for (int retry = 1; retry <= 3; retry++) {
+            assertTrue(workflowService.sendEvent(orderId, OrderEvents.DISPATCH_FAILED).accepted());
+            assertEquals(OrderStates.DISPATCH_FAILED, workflowService.getOrderState(orderId));
+            assertTrue(workflowService.getAvailableEvents(orderId).contains(OrderEvents.RETRY_DISPATCH));
+
+            assertTrue(workflowService.sendEvent(orderId, OrderEvents.RETRY_DISPATCH).accepted());
+            assertEquals(OrderStates.PREPARING, workflowService.getOrderState(orderId));
+            assertEquals(retry, workflowService.getDispatchRetryCount(orderId));
+        }
+
+        assertTrue(workflowService.sendEvent(orderId, OrderEvents.DISPATCH_FAILED).accepted());
+        assertFalse(workflowService.getAvailableEvents(orderId).contains(OrderEvents.RETRY_DISPATCH));
+        var blockedRetry = workflowService.sendEvent(orderId, OrderEvents.RETRY_DISPATCH);
+        assertFalse(blockedRetry.accepted());
+        assertEquals("Maximum dispatch retries reached.", blockedRetry.reason());
+
+        assertTrue(workflowService.sendEvent(orderId, OrderEvents.CANCEL).accepted());
+        assertEquals(OrderStates.CANCELLED, workflowService.getOrderState(orderId));
+    }
 }

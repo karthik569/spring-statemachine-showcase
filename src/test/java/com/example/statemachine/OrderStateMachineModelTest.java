@@ -10,8 +10,8 @@ class OrderStateMachineModelTest {
 
     @Test
     void testEnumValues() {
-        assertEquals(11, OrderStates.values().length);
-        assertEquals(12, OrderEvents.values().length);
+        assertEquals(12, OrderStates.values().length);
+        assertEquals(14, OrderEvents.values().length);
         assertEquals(OrderStates.SUBMITTED, OrderStates.valueOf("SUBMITTED"));
         assertEquals(OrderEvents.PAY, OrderEvents.valueOf("PAY"));
     }

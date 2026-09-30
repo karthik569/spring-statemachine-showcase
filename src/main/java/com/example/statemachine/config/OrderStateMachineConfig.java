@@ -90,6 +90,30 @@ public class OrderStateMachineConfig extends EnumStateMachineConfigurerAdapter<O
                 .withExternal()
                 .source(OrderStates.PREPARING).target(OrderStates.SHIPPED).event(OrderEvents.DISPATCH)
                 .and()
+                // PREPARING -> DISPATCH_FAILED when carrier handoff fails
+                .withExternal()
+                .source(OrderStates.PREPARING).target(OrderStates.DISPATCH_FAILED)
+                .event(OrderEvents.DISPATCH_FAILED)
+                .and()
+                // DISPATCH_FAILED -> PREPARING, guarded by the per-order retry limit
+                .withExternal()
+                .source(OrderStates.DISPATCH_FAILED).target(OrderStates.PREPARING)
+                .event(OrderEvents.RETRY_DISPATCH)
+                .guard(context -> {
+                    Object retryCount = context.getExtendedState().getVariables()
+                            .get(OrderMachineVariables.DISPATCH_RETRY_COUNT);
+                    return retryCount instanceof Number number
+                            && number.intValue() < OrderMachineVariables.MAX_DISPATCH_RETRIES;
+                })
+                .action(context -> {
+                    var variables = context.getExtendedState().getVariables();
+                    Object retryCount = variables.get(OrderMachineVariables.DISPATCH_RETRY_COUNT);
+                    int nextCount = (retryCount instanceof Number number ? number.intValue() : 0) + 1;
+                    variables.put(OrderMachineVariables.DISPATCH_RETRY_COUNT, nextCount);
+                    log.info("[STATE-MACHINE] Dispatch retry {} of {}", nextCount,
+                            OrderMachineVariables.MAX_DISPATCH_RETRIES);
+                })
+                .and()
                 // SHIPPED -> DELIVERED
                 .withExternal()
                 .source(OrderStates.SHIPPED).target(OrderStates.DELIVERED).event(OrderEvents.DELIVER)
@@ -134,6 +158,9 @@ public class OrderStateMachineConfig extends EnumStateMachineConfigurerAdapter<O
                 .source(OrderStates.PAID).target(OrderStates.CANCELLED).event(OrderEvents.CANCEL)
                 .and()
                 .withExternal()
-                .source(OrderStates.PREPARING).target(OrderStates.CANCELLED).event(OrderEvents.CANCEL);
+                .source(OrderStates.PREPARING).target(OrderStates.CANCELLED).event(OrderEvents.CANCEL)
+                .and()
+                .withExternal()
+                .source(OrderStates.DISPATCH_FAILED).target(OrderStates.CANCELLED).event(OrderEvents.CANCEL);
     }
 }
