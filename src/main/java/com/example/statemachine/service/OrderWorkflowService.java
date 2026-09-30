@@ -108,8 +108,23 @@ public class OrderWorkflowService {
 
     public List<OrderDetails> getOrdersWithDetails() {
         return orderDetails.values().stream()
-                .sorted(java.util.Comparator.comparing(OrderDetails::orderId))
+                .sorted(java.util.Comparator.comparing(OrderDetails::createdAt).reversed()
+                        .thenComparing(OrderDetails::orderId))
                 .toList();
+    }
+
+    public List<OrderDetails> getOrdersWithDetails(OrderStates state, int page, int size) {
+        return getOrdersWithDetails().stream()
+                .filter(details -> state == null || getOrderState(details.orderId()) == state)
+                .skip((long) page * size)
+                .limit(size)
+                .toList();
+    }
+
+    public long countOrders(OrderStates state) {
+        return orderDetails.keySet().stream()
+                .filter(orderId -> state == null || getOrderState(orderId) == state)
+                .count();
     }
 
     public Map<OrderStates, Long> getOrderCountsByState() {

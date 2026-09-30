@@ -5,6 +5,10 @@ spring:
   application:
     name: spring-statemachine-showcase
 
+logging:
+  file:
+    name: logs/application.log
+
 management:
   endpoints:
     web:

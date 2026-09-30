@@ -147,12 +147,28 @@ public class OrderWorkflowController {
     }
 
     @GetMapping("/details")
-    public ResponseEntity<List<OrderView>> getOrdersWithDetails() {
-        List<OrderView> orders = workflowService.getOrdersWithDetails().stream()
+    public ResponseEntity<Map<String, Object>> getOrdersWithDetails(
+            @RequestParam(required = false) OrderStates state,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        if (page < 0 || size < 1 || size > 100) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "page must be non-negative and size must be between 1 and 100"));
+        }
+        List<OrderView> orders = workflowService.getOrdersWithDetails(state, page, size).stream()
                 .map(details -> new OrderView(details.orderId(), workflowService.getOrderState(details.orderId()),
                         details.customerName(), details.customerEmail(), details.createdAt()))
                 .toList();
-        return ResponseEntity.ok(orders);
+        long total = workflowService.countOrders(state);
+        return ResponseEntity.ok(Map.of(
+                "orders", orders,
+                "page", page,
+                "size", size,
+                "totalOrders", total,
+                "totalPages", total == 0 ? 0 : (total + size - 1) / size,
+                "hasNext", (long) (page + 1) * size < total,
+                "hasPrevious", page > 0
+        ));
     }
 
     @GetMapping("/{orderId}/details")
