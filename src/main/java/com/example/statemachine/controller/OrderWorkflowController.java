@@ -13,10 +13,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Duration;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.HashSet;
 import java.util.stream.Collectors;
 import java.util.UUID;
 
@@ -226,6 +227,24 @@ public class OrderWorkflowController {
         ));
     }
 
+    @GetMapping("/stale")
+    public ResponseEntity<?> getStaleOrders(@RequestParam(defaultValue = "24") int hours) {
+        if (hours < 1 || hours > 720) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "hours must be between 1 and 720"));
+        }
+        List<StaleOrderView> orders = workflowService.getStaleOrders(Duration.ofHours(hours)).stream()
+                .map(stale -> new StaleOrderView(stale.details().orderId(), stale.currentState(),
+                        stale.details().customerName(), stale.details().customerEmail(),
+                        stale.details().createdAt(), stale.lastActivityAt(), stale.inactiveForSeconds()))
+                .toList();
+        return ResponseEntity.ok(Map.of(
+                "thresholdHours", hours,
+                "totalOrders", orders.size(),
+                "orders", orders
+        ));
+    }
+
     @GetMapping("/{orderId}/history")
     public ResponseEntity<?> getOrderHistory(@PathVariable String orderId) {
         if (!workflowService.orderExists(orderId)) {
@@ -257,6 +276,11 @@ public class OrderWorkflowController {
 
     public record BulkEventResult(String orderId, String status, OrderStates previousState,
                                   OrderStates currentState, boolean transitionAccepted, String reason) {
+    }
+
+    public record StaleOrderView(String orderId, OrderStates currentState, String customerName,
+                                 String customerEmail, java.time.Instant createdAt,
+                                 java.time.Instant lastActivityAt, long inactiveForSeconds) {
     }
 
     public record OrderView(String orderId, OrderStates currentState, String customerName,

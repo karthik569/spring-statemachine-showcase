@@ -11,6 +11,7 @@ import org.springframework.statemachine.StateMachineEventResult;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -140,6 +141,26 @@ public class OrderWorkflowService {
         return value != null && value.toLowerCase().contains(query);
     }
 
+    public List<StaleOrder> getStaleOrders(Duration inactivityThreshold) {
+        Instant now = Instant.now();
+        Instant cutoff = now.minus(inactivityThreshold);
+        return orderDetails.values().stream()
+                .map(details -> {
+                    List<TransitionRecord> records = history.get(details.orderId());
+                    Instant lastActivityAt = records == null || records.isEmpty()
+                            ? details.createdAt()
+                            : records.get(records.size() - 1).timestamp();
+                    return new StaleOrder(details, getOrderState(details.orderId()), lastActivityAt,
+                            Duration.between(lastActivityAt, now).getSeconds());
+                })
+                .filter(order -> order.currentState() != OrderStates.DELIVERED
+                        && order.currentState() != OrderStates.CANCELLED)
+                .filter(order -> order.lastActivityAt().isBefore(cutoff))
+                .sorted(java.util.Comparator.comparing(StaleOrder::lastActivityAt)
+                        .thenComparing(order -> order.details().orderId()))
+                .toList();
+    }
+
     public Map<OrderStates, Long> getOrderCountsByState() {
         Map<OrderStates, Long> counts = new EnumMap<>(OrderStates.class);
         for (OrderStates state : OrderStates.values()) {
@@ -162,5 +183,9 @@ public class OrderWorkflowService {
     }
 
     public record OrderDetails(String orderId, String customerName, String customerEmail, Instant createdAt) {
+    }
+
+    public record StaleOrder(OrderDetails details, OrderStates currentState, Instant lastActivityAt,
+                             long inactiveForSeconds) {
     }
 }
