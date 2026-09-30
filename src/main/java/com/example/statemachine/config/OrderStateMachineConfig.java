@@ -43,6 +43,7 @@ public class OrderStateMachineConfig extends EnumStateMachineConfigurerAdapter<O
         states
                 .withStates()
                 .initial(OrderStates.SUBMITTED)
+                .choice(OrderStates.PAYMENT_DECISION)
                 .states(EnumSet.allOf(OrderStates.class))
                 .end(OrderStates.RETURNED)
                 .end(OrderStates.CANCELLED);
@@ -55,9 +56,25 @@ public class OrderStateMachineConfig extends EnumStateMachineConfigurerAdapter<O
                 .withExternal()
                 .source(OrderStates.SUBMITTED).target(OrderStates.PAYMENT_PENDING).event(OrderEvents.PAY)
                 .and()
-                // PAYMENT_PENDING -> PAID
+                // PAYMENT_PENDING -> payment decision choice -> PAID or PAYMENT_REVIEW
                 .withExternal()
-                .source(OrderStates.PAYMENT_PENDING).target(OrderStates.PAID).event(OrderEvents.PAYMENT_SUCCESS)
+                .source(OrderStates.PAYMENT_PENDING).target(OrderStates.PAYMENT_DECISION).event(OrderEvents.PAYMENT_SUCCESS)
+                .and()
+                .withChoice()
+                .source(OrderStates.PAYMENT_DECISION)
+                .first(OrderStates.PAID, context -> {
+                    Object score = context.getExtendedState().getVariables()
+                            .get(OrderMachineVariables.PAYMENT_RISK_SCORE);
+                    return !(score instanceof Number number)
+                            || number.intValue() < OrderMachineVariables.PAYMENT_REVIEW_THRESHOLD;
+                })
+                .last(OrderStates.PAYMENT_REVIEW)
+                .and()
+                .withExternal()
+                .source(OrderStates.PAYMENT_REVIEW).target(OrderStates.PAID).event(OrderEvents.APPROVE_PAYMENT_REVIEW)
+                .and()
+                .withExternal()
+                .source(OrderStates.PAYMENT_REVIEW).target(OrderStates.PAYMENT_FAILED).event(OrderEvents.REJECT_PAYMENT_REVIEW)
                 .and()
                 // PAYMENT_PENDING -> PAYMENT_FAILED (on failure)
                 .withExternal()
@@ -156,6 +173,9 @@ public class OrderStateMachineConfig extends EnumStateMachineConfigurerAdapter<O
                 .and()
                 .withExternal()
                 .source(OrderStates.PAID).target(OrderStates.CANCELLED).event(OrderEvents.CANCEL)
+                .and()
+                .withExternal()
+                .source(OrderStates.PAYMENT_REVIEW).target(OrderStates.CANCELLED).event(OrderEvents.CANCEL)
                 .and()
                 .withExternal()
                 .source(OrderStates.PREPARING).target(OrderStates.CANCELLED).event(OrderEvents.CANCEL)

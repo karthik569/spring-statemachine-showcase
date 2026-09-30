@@ -7,8 +7,8 @@ A production-grade finite state machine application managing lifecycle transitio
 ## 🌟 Comprehensive Method-by-Method Breakdown
 
 ### 1. [`OrderStateMachineConfig`](file:///sdcard/Download/termux/spring-statemachine-showcase/src/main/java/com/example/statemachine/config/OrderStateMachineConfig.java)
-- **`void configure(StateMachineStateConfigurer<OrderStates, OrderEvents> states)`**: Defines the finite state hierarchy, including payment failure and return states, with `RETURNED` and `CANCELLED` as terminal states.
-- **`void configure(StateMachineTransitionConfigurer<OrderStates, OrderEvents> transitions)`**: Configures lifecycle pathways, guarded payment and dispatch retries, and the 30-day return-window guard.
+- **`void configure(StateMachineStateConfigurer<OrderStates, OrderEvents> states)`**: Defines the finite state hierarchy, including payment review and return states, with `RETURNED` and `CANCELLED` as terminal states.
+- **`void configure(StateMachineTransitionConfigurer<OrderStates, OrderEvents> transitions)`**: Configures lifecycle pathways, a choice pseudostate for risk-based payment routing, guarded payment and dispatch retries, and the 30-day return-window guard.
 
 ### 2. [`OrderWorkflowController`](file:///sdcard/Download/termux/spring-statemachine-showcase/src/main/java/com/example/statemachine/controller/OrderWorkflowController.java)
 - **`ResponseEntity<Map<String, Object>> createOrder()`**: `POST /api/workflow/orders/create`; instantiates a new isolated state machine instance from `StateMachineFactory<OrderState, OrderEvent>` and sets initial state `SUBMITTED`.
@@ -94,6 +94,17 @@ curl -s "http://localhost:8087/api/workflow/orders/<ORDER_ID>/state"
 ```
 
 The order state response includes `paymentRetriesUsed`; rejected retry requests return HTTP 409 with the reason `Maximum payment retries reached.`
+
+### Choice pseudostate for payment review
+
+`PAYMENT_SUCCESS` enters a choice pseudostate. A `paymentRiskScore` below 70 routes directly to `PAID`; a score of 70 or higher routes to `PAYMENT_REVIEW`. If no score is supplied, the machine treats the payment as low risk. A review can be resolved with `APPROVE_PAYMENT_REVIEW` or `REJECT_PAYMENT_REVIEW`, and can be cancelled while it is pending.
+
+```bash
+curl -i -X POST "http://localhost:8087/api/workflow/orders/<ORDER_ID>/event?event=PAYMENT_SUCCESS&paymentRiskScore=82"
+curl -i -X POST "http://localhost:8087/api/workflow/orders/<ORDER_ID>/event?event=APPROVE_PAYMENT_REVIEW"
+```
+
+Scores must be between 0 and 100. The score is stored in that order's extended state and evaluated by a guarded choice branch.
 
 ### Guarded dispatch retries
 

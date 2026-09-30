@@ -57,6 +57,10 @@ public class OrderWorkflowService {
     }
 
     public EventOutcome sendEvent(String orderId, OrderEvents event) {
+        return sendEvent(orderId, event, null);
+    }
+
+    public EventOutcome sendEvent(String orderId, OrderEvents event, Integer paymentRiskScore) {
         StateMachine<OrderStates, OrderEvents> sm = machines.get(orderId);
         if (sm == null) {
             return new EventOutcome(false, "Order was not found.");
@@ -65,7 +69,12 @@ public class OrderWorkflowService {
         synchronized (sm) {
             OrderStates previousState = sm.getState().getId();
             log.info("[WORKFLOW] Sending event {} to orderId {} (Current: {})", event, orderId, previousState);
-            var message = MessageBuilder.withPayload(event).setHeader("orderId", orderId).build();
+            var messageBuilder = MessageBuilder.withPayload(event).setHeader("orderId", orderId);
+            if (paymentRiskScore != null && event == OrderEvents.PAYMENT_SUCCESS) {
+                messageBuilder.setHeader(OrderMachineVariables.PAYMENT_RISK_SCORE, paymentRiskScore);
+                sm.getExtendedState().getVariables().put(OrderMachineVariables.PAYMENT_RISK_SCORE, paymentRiskScore);
+            }
+            var message = messageBuilder.build();
             StateMachineEventResult<OrderStates, OrderEvents> result =
                     sm.sendEvent(Mono.just(message)).blockLast();
             OrderStates currentState = sm.getState().getId();

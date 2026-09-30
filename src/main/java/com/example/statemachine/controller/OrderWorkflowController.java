@@ -81,14 +81,20 @@ public class OrderWorkflowController {
     @PostMapping("/{orderId}/event")
     public ResponseEntity<Map<String, Object>> triggerEvent(
             @PathVariable String orderId,
-            @RequestParam OrderEvents event) {
+            @RequestParam OrderEvents event,
+            @RequestParam(required = false) Integer paymentRiskScore) {
+
+        if (paymentRiskScore != null && (paymentRiskScore < 0 || paymentRiskScore > 100)) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "paymentRiskScore must be between 0 and 100."));
+        }
 
         if (!workflowService.orderExists(orderId)) {
             return ResponseEntity.notFound().build();
         }
 
         OrderStates stateBefore = workflowService.getOrderState(orderId);
-        var outcome = workflowService.sendEvent(orderId, event);
+        var outcome = workflowService.sendEvent(orderId, event, paymentRiskScore);
         OrderStates stateAfter = workflowService.getOrderState(orderId);
 
         Map<String, Object> response = new LinkedHashMap<>();

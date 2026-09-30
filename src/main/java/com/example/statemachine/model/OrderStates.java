@@ -4,6 +4,8 @@ public enum OrderStates {
     SUBMITTED,
     PAYMENT_PENDING,
     PAYMENT_FAILED,
+    PAYMENT_DECISION,
+    PAYMENT_REVIEW,
     PAID,
     PREPARING,
     DISPATCH_FAILED,

@@ -20,6 +20,32 @@ class OrderPaymentRetryStateMachineTest {
     private OrderWorkflowService workflowService;
 
     @Test
+    void choiceRoutesLowRiskPaymentToPaidAndHighRiskPaymentToManualReview() {
+        String lowRiskOrder = "ORD-LOW-RISK-" + UUID.randomUUID();
+        workflowService.createOrder(lowRiskOrder);
+        assertTrue(workflowService.sendEvent(lowRiskOrder, OrderEvents.PAY).accepted());
+        assertTrue(workflowService.sendEvent(lowRiskOrder, OrderEvents.PAYMENT_SUCCESS, 20).accepted());
+        assertEquals(OrderStates.PAID, workflowService.getOrderState(lowRiskOrder));
+
+        String highRiskOrder = "ORD-HIGH-RISK-" + UUID.randomUUID();
+        workflowService.createOrder(highRiskOrder);
+        assertTrue(workflowService.sendEvent(highRiskOrder, OrderEvents.PAY).accepted());
+        assertTrue(workflowService.sendEvent(highRiskOrder, OrderEvents.PAYMENT_SUCCESS, 82).accepted());
+        assertEquals(OrderStates.PAYMENT_REVIEW, workflowService.getOrderState(highRiskOrder));
+        assertTrue(workflowService.getAvailableEvents(highRiskOrder)
+                .contains(OrderEvents.APPROVE_PAYMENT_REVIEW));
+        assertTrue(workflowService.sendEvent(highRiskOrder, OrderEvents.APPROVE_PAYMENT_REVIEW).accepted());
+        assertEquals(OrderStates.PAID, workflowService.getOrderState(highRiskOrder));
+
+        String rejectedOrder = "ORD-REJECT-RISK-" + UUID.randomUUID();
+        workflowService.createOrder(rejectedOrder);
+        assertTrue(workflowService.sendEvent(rejectedOrder, OrderEvents.PAY).accepted());
+        assertTrue(workflowService.sendEvent(rejectedOrder, OrderEvents.PAYMENT_SUCCESS, 100).accepted());
+        assertTrue(workflowService.sendEvent(rejectedOrder, OrderEvents.REJECT_PAYMENT_REVIEW).accepted());
+        assertEquals(OrderStates.PAYMENT_FAILED, workflowService.getOrderState(rejectedOrder));
+    }
+
+    @Test
     void retriesPaymentUpToThreeTimesThenGuardRejectsAnotherRetry() {
         String orderId = "ORD-RETRY-" + UUID.randomUUID();
         workflowService.createOrder(orderId);
